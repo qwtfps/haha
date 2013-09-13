@@ -82,7 +82,7 @@ func init() {
 }
 
 func linkJson(status string, subKey string, val string) string {
-	return "{\"status\":" + status + "," + "\"" + subKey + "\"" + ":" + "\"" + string(val) + "\"" + "}"
+	return "{\"status\":" + status + "," + "\"" + subKey + "\"" + ":" + val + "}"
 }
 
 func root(w http.ResponseWriter, r *http.Request) {
@@ -104,8 +104,8 @@ func uptoken(bucketName string, uid string) string {
 	body := "uid=$(x:uid)&key=$(etag)&size=$(fsize)" + "&gentime=" + string(time.Now().Unix())
 	putPolicy := rs.PutPolicy{
 		Scope:        bucketName,
-		CallbackUrl:  "http://riji001.com/api/202/travel_diary.php?method_name=profile", //http://<your domain>/recqiniu
-		CallbackBody: body,                                                              //gae body   eg:test=$(x:test)&key=$(etag)&size=$(fsize)&uid=$(endUser)
+		CallbackUrl:  "http://www.oohoohoo.com/recqiniu", //http://<your domain>/recqiniu
+		CallbackBody: body,                               //gae body   eg:test=$(x:test)&key=$(etag)&size=$(fsize)&uid=$(endUser)
 		//ReturnUrl:   returnUrl,
 		//ReturnBody:  returnBody,
 		//AsyncOps:    asyncOps,
@@ -141,23 +141,22 @@ func generate(w http.ResponseWriter, r *http.Request) {
 				TokenTime: time.Now(),
 			}
 			//kkk, err1 := datastore.Put(c, datastore.NewIncompleteKey(c, "UserStruct", nil), &thisUser)
-			fmt.Fprintln(w, thisUser)
+			//fmt.Fprintln(w, thisUser)
 			key_str := "UserStruct" + r.FormValue("uid")
 			key := datastore.NewKey(c, "UserStruct", key_str, 0, nil)
 			_, err1 := datastore.Put(c, key, &thisUser)
 			if err1 != nil {
-				fmt.Fprintln(w, linkJson("0", "uploadToken", ""))
+				fmt.Fprintln(w, linkJson("0", "uploadToken", "\"\""))
 			} else {
-				fmt.Fprintln(w, linkJson("1", "uploadToken", token))
+				fmt.Fprintln(w, linkJson("1", "uploadToken", "\""+token+"\""))
 				//fmt.Fprintln(w, "success")
 			}
 
 		} else {
-			fmt.Fprintln(w, linkJson("0", "uploadToken", "")) //not find this uid
+			fmt.Fprintln(w, linkJson("0", "uploadToken", "\"\"")) //not find this uid
 		}
 
 	}
-
 }
 
 func checkvalid(w http.ResponseWriter, r *http.Request) {
@@ -174,9 +173,9 @@ func checkvalid(w http.ResponseWriter, r *http.Request) {
 			thisUser := existUser[0]
 			result := isvalid(thisUser.TokenTime)
 			if result {
-				fmt.Fprintln(w, linkJson("1", "msg", "success"))
+				fmt.Fprintln(w, linkJson("1", "msg", "\"success\""))
 			} else {
-				fmt.Fprintln(w, linkJson("0", "msg", "fail")) //need re generate token
+				fmt.Fprintln(w, linkJson("0", "msg", "\"fail\"")) //need re generate token
 			}
 		} else {
 			fmt.Fprintln(w, linkJson("0", "uploadToken", "")) //not find this uid
@@ -233,10 +232,10 @@ func recqiniu(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, key)
 		_, err1 := datastore.Put(c, key, &audio)
 		if err1 != nil {
-			fmt.Fprintln(w, linkJson("0", "msg", "fail"))
+			fmt.Fprintln(w, linkJson("0", "msg", "\"fail\""))
 			return
 		} else {
-			fmt.Fprintln(w, linkJson("1", "msg", "success"))
+			fmt.Fprintln(w, linkJson("1", "msg", "\"success\""))
 		}
 
 	}
@@ -299,6 +298,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 				fmt.Println(err)
 				return
 			}
+
 			fmt.Fprintln(w, linkJson("1", "userinfo", string(b)))
 			//注册成功后,记录原来输入的,客户端执行登录
 		}
@@ -377,13 +377,15 @@ func query(w http.ResponseWriter, r *http.Request) {
 			}
 			b, err := json.Marshal(s)
 			if err != nil {
-				fmt.Fprintln(w, linkJson("0", "msg", "no audio"))
+				fmt.Fprintln(w, linkJson("0", "msg", "\"no audio\""))
+				return
 			}
-			fmt.Fprint(w, "{\"status\":\"1\""+","+string(b)+"}")
+			//fmt.Fprint(w, "{\"status\":\"1\""+","+string(b)+"}")
 			//fmt.Fprintln(w, linkJson("1", "msg", string(b)))
+			fmt.Fprintln(w, linkJson("1", "audios", string(b)))
 
 		} else {
-			fmt.Fprintln(w, linkJson("0", "msg", "no audio"))
+			fmt.Fprintln(w, linkJson("0", "msg", "\"no audio\""))
 		}
 
 	}
