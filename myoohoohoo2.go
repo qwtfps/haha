@@ -101,11 +101,11 @@ func root(w http.ResponseWriter, r *http.Request) {
 
 func uptoken(bucketName string, uid string) string {
 	//body := "x:uid=" + uid + "&key=$(etag)&size=$(fsize)" // + "&gentime=" + string(time.Now().Unix())
-	body := "uid=$(x:uid)&key=$(etag)&size=$(fsize)" + "&gentime=" + string(time.Now().Unix())
+	body := "uid=$(x:uid)&audiotitle=$(x:audiotitle)&key=$(etag)&size=$(fsize)" + "&gentime=" + string(time.Now().Unix())
 	putPolicy := rs.PutPolicy{
 		Scope:        bucketName,
-		CallbackUrl:  "http://www.oohoohoo.com/recqiniu", //http://<your domain>/recqiniu
-		CallbackBody: body,                               //gae body   eg:test=$(x:test)&key=$(etag)&size=$(fsize)&uid=$(endUser)
+		CallbackUrl:  "http://www.oohoohoo.com/recqiniu?", //http://<your domain>/recqiniu
+		CallbackBody: body,                                //gae body   eg:test=$(x:test)&key=$(etag)&size=$(fsize)&uid=$(endUser)
 		//ReturnUrl:   returnUrl,
 		//ReturnBody:  returnBody,
 		//AsyncOps:    asyncOps,
@@ -198,8 +198,10 @@ func recqiniu(w http.ResponseWriter, r *http.Request) {
 	if "POST" == r.Method {
 		uid := r.FormValue("uid")
 		audiokey := r.FormValue("key")
-		audiotitle := r.FormValue("title")
+		audiotitle := r.FormValue("audiotitle")
 		size := r.FormValue("size")
+
+		fmt.Fprintln(w, linkJson("1", "audiotitle", "\""+audiotitle+"\""))
 
 		c := appengine.NewContext(r)
 
@@ -228,8 +230,6 @@ func recqiniu(w http.ResponseWriter, r *http.Request) {
 		aid_str := strconv.Itoa(aid_int)
 		key_str := "AudioStruct" + aid_str //应该从七牛返回的来存，这个key，或者从手机传出去的时候就规则好key
 		key := datastore.NewKey(c, "AudioStruct", key_str, 0, nil)
-		fmt.Fprint(w, "reg:")
-		fmt.Fprint(w, key)
 		_, err1 := datastore.Put(c, key, &audio)
 		if err1 != nil {
 			fmt.Fprintln(w, linkJson("0", "msg", "\"fail\""))
@@ -358,18 +358,17 @@ func query(w http.ResponseWriter, r *http.Request) {
 		//type order audio
 		page, _ := strconv.Atoi(r.FormValue("page"))
 		countbegin := (page - 1) * 20 //page * 20
-		q := datastore.NewQuery("AudioStruct").Filter("IsValid =", true).Order("-Date").Offset(countbegin).Limit(20)
+		q := datastore.NewQuery("AudioStruct").Filter("IsValid =", true).Order("-Date").Limit(20).Offset(countbegin)
 
 		audios := make([]AudioStruct, 0, 10) //need max or auto add
 		if _, err := q.GetAll(c, &audios); err != nil {
-
+			fmt.Fprintln(w, linkJson("0", "msg", "\"db error\""))
 			return
 		}
 
 		if len(audios) > 0 {
-			fmt.Fprint(w, "has audio")
-			getAudio := audios[0].AudioKey
-			fmt.Fprint(w, getAudio)
+			//fmt.Fprint(w, "has audio")
+			//getAudio := audios[0].AudioKey
 
 			var s AudioSlice
 			for _, value := range audios {
@@ -377,7 +376,7 @@ func query(w http.ResponseWriter, r *http.Request) {
 			}
 			b, err := json.Marshal(s)
 			if err != nil {
-				fmt.Fprintln(w, linkJson("0", "msg", "\"no audio\""))
+				fmt.Fprintln(w, linkJson("0", "msg", "\"json error\""))
 				return
 			}
 			//fmt.Fprint(w, "{\"status\":\"1\""+","+string(b)+"}")
