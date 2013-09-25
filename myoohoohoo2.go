@@ -34,6 +34,7 @@ type UserStruct struct {
 type AudioStruct struct {
 	Aid        int
 	Uid        int
+	UserName   string
 	AudioKey   string
 	AudioTitle string
 	IsValid    bool `json:"-"`
@@ -64,6 +65,7 @@ type CollectionAudio struct {
 //	r.HandleFunc("/recqiniu", recqiniu) //get sth from qiniu
 //}
 
+//建表记录设备型号，用户来源国家地区，系统
 func init() {
 	ACCESS_KEY = "iN7NgwM31j4-BZacMjPrOQBs34UG1maYCAQmhdCV"
 	SECRET_KEY = "6QTOr2Jg1gcZEWDQXKOGZh5PziC2MCV5KsntT70j"
@@ -101,7 +103,7 @@ func root(w http.ResponseWriter, r *http.Request) {
 
 func uptoken(bucketName string, uid string) string {
 	//body := "x:uid=" + uid + "&key=$(etag)&size=$(fsize)" // + "&gentime=" + string(time.Now().Unix())
-	body := "uid=$(x:uid)&audiotitle=$(x:audiotitle)&key=$(etag)&size=$(fsize)" + "&gentime=" + string(time.Now().Unix())
+	body := "uid=$(x:uid)&username=$(x:username)&audiotitle=$(x:audiotitle)&key=$(etag)&size=$(fsize)" + "&gentime=" + string(time.Now().Unix())
 	putPolicy := rs.PutPolicy{
 		Scope:        bucketName,
 		CallbackUrl:  "http://www.oohoohoo.com/recqiniu?", //http://<your domain>/recqiniu
@@ -197,6 +199,7 @@ func isvalid(gentime time.Time) bool {
 func recqiniu(w http.ResponseWriter, r *http.Request) {
 	if "POST" == r.Method {
 		uid := r.FormValue("uid")
+		username := r.FormValue("username")
 		audiokey := r.FormValue("key")
 		audiotitle := r.FormValue("audiotitle")
 		size := r.FormValue("size")
@@ -219,6 +222,7 @@ func recqiniu(w http.ResponseWriter, r *http.Request) {
 		audio := AudioStruct{
 			Aid:        aid_int,
 			Uid:        uid_int,
+			UserName:   username,
 			AudioKey:   audiokey,
 			AudioTitle: audiotitle,
 			IsValid:    true,
@@ -372,7 +376,7 @@ func query(w http.ResponseWriter, r *http.Request) {
 
 			var s AudioSlice
 			for _, value := range audios {
-				s.Audios = append(s.Audios, AudioStruct{Aid: value.Aid, Uid: value.Uid, AudioKey: value.AudioKey, AudioTitle: value.AudioTitle, Favorite: value.Favorite, Date: value.Date, Size: value.Size})
+				s.Audios = append(s.Audios, AudioStruct{Aid: value.Aid, Uid: value.Uid, UserName: value.UserName, AudioKey: value.AudioKey, AudioTitle: value.AudioTitle, Favorite: value.Favorite, Date: value.Date, Size: value.Size})
 			}
 			b, err := json.Marshal(s)
 			if err != nil {
@@ -386,21 +390,103 @@ func query(w http.ResponseWriter, r *http.Request) {
 		} else {
 			fmt.Fprintln(w, linkJson("0", "msg", "\"no audio\""))
 		}
-
 	}
 }
 
 func delaudio(w http.ResponseWriter, r *http.Request) {
 	if "POST" == r.Method {
+		c := appengine.NewContext(r)
+		aid, _ := strconv.Atoi(r.FormValue("aid"))
+		q := datastore.NewQuery("AudioStruct").Filter("Aid =", aid)
+
+		audios := make([]AudioStruct, 0, 1)
+		if _, err := q.GetAll(c, &audios); err != nil {
+			return
+		}
+		if len(audios) > 0 {
+			thisAudio := audios[0]
+			thisAudio = AudioStruct{
+				Aid:        thisAudio.Aid,
+				Uid:        thisAudio.Uid,
+				UserName:   thisAudio.UserName,
+				AudioKey:   thisAudio.AudioKey,
+				AudioTitle: thisAudio.AudioTitle,
+				IsValid:    false,
+				Favorite:   thisAudio.Favorite,
+				Date:       thisAudio.Date,
+				Size:       thisAudio.Size,
+			}
+
+			key_str := "AudioStruct" + r.FormValue("aid")
+			key := datastore.NewKey(c, "AudioStruct", key_str, 0, nil)
+			_, err1 := datastore.Put(c, key, &thisAudio)
+			if err1 != nil {
+				fmt.Fprintln(w, linkJson("0", "msg", "\"delete failed\""))
+			} else {
+				fmt.Fprintln(w, linkJson("1", "msg", "\"delete succeed\""))
+			}
+		}
 	}
 }
 
 func addcollect(w http.ResponseWriter, r *http.Request) {
 	if "POST" == r.Method {
+		c := appengine.NewContext(r)
+		uid, _ := strconv.Atoi(r.FormValue("uid"))
+		aid, _ := strconv.Atoi(r.FormValue("aid"))
+		q := datastore.NewQuery("CollectionAudio").Filter("Uid =", uid).Filter("Aid =", aid)
+		existC := make([]CollectionAudio, 0, 1) //this uid collected this aid before
+		if _, err := q.GetAll(c, &existC); err != nil {
+			fmt.Fprint(w, "{\"status\":\"0\"}")
+			return
+		}
+		if len(existC) > 0 {
+			//msg,this uid collected this aid before
+			fmt.Fprint(w, "{\"status\":\"0\",\"msg\":\"1\"}")
+			return
+		}
+
+		collect := CollectionAudio{
+			Uid: uid,
+			Aid: aid,
+		}
+		key_str := "CollectionAudio" + r.FormValue("uid") + r.FormValue("aid")
+		key := datastore.NewKey(c, "CollectionAudio", key_str, 0, nil)
+		_, err := datastore.Put(c, key, &collect)
+		if err != nil {
+			fmt.Fprint(w, "{\"status\":\"0\"}")
+			return
+		} else {
+			fmt.Fprintln(w, "{\"status\":\"1\"}") //collect success
+		}
 	}
 }
 func delcollect(w http.ResponseWriter, r *http.Request) {
 	if "POST" == r.Method {
+		c := appengine.NewContext(r)
+		uid, _ := strconv.Atoi(r.FormValue("uid"))
+		aid, _ := strconv.Atoi(r.FormValue("aid"))
+		q := datastore.NewQuery("CollectionAudio").Filter("Uid =", uid).Filter("Aid =", aid)
+		existC := make([]CollectionAudio, 0, 1) //this uid collected this aid before
+		if _, err := q.GetAll(c, &existC); err != nil {
+			fmt.Fprint(w, "{\"status\":\"0\"}")
+			return
+		}
+		if len(existC) > 0 {
+			//delete record
+			key_str := "CollectionAudio" + r.FormValue("uid") + r.FormValue("aid")
+			key := datastore.NewKey(c, "CollectionAudio", key_str, 0, nil)
+			err := datastore.Delete(c, key)
+			if err != nil {
+				fmt.Fprint(w, "{\"status\":\"0\"}") //delete fail
+				return
+			} else {
+				fmt.Fprint(w, "{\"status\":\"1\"}") //delete success
+				return
+			}
+		} else {
+			fmt.Fprint(w, "{\"status\":\"0\"}")
+		}
 	}
 }
 
@@ -449,3 +535,28 @@ func delcollect(w http.ResponseWriter, r *http.Request) {
 //http://hi.baidu.com/liuhelishuang/item/035bc33f23c389c21b9696a7
 //http://golang.usr.cc/thread-52517-1-1.html//可能有用，上传file的defer后正确的
 //https://github.com/jimmykuu/gopher/blob/master/src/gopher/account.go
+
+//c := appengine.NewContext(r)
+
+//	audio := AudioStruct{
+//		Aid:        2,
+//		Uid:        2,
+//		UserName:   "yjmiyf",
+//		AudioKey:   " hmjg ",
+//		AudioTitle: "hjmhgj",
+//		IsValid:    true,
+//		Favorite:   0,
+//		Date:       time.Now(),
+//		Size:       1233,
+//	}
+//	//_, err1 := datastore.Put(c, datastore.NewIncompleteKey(c, "AudioStruct", nil), &audio)
+//	aid_str := strconv.Itoa(2)
+//	key_str := "AudioStruct" + aid_str //应该从七牛返回的来存，这个key，或者从手机传出去的时候就规则好key
+//	key := datastore.NewKey(c, "AudioStruct", key_str, 0, nil)
+//	_, err1 := datastore.Put(c, key, &audio)
+//	if err1 != nil {
+//		fmt.Fprintln(w, linkJson("0", "msg", "\"fail\""))
+//		return
+//	} else {
+//		fmt.Fprintln(w, linkJson("1", "msg", "\"success\""))
+//	}
